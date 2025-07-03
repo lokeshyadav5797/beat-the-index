@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Beat the Index</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+</head>
+<body>
+    <div class="container two-pane-layout">
+        <aside class="left-pane">
+            <h1>Beat the Index</h1>
+            <form id="stock-form">
+                <div class="input-group">
+                    <label for="main-ticker">Stock Ticker:</label>
+                    <input type="text" id="main-ticker" placeholder="e.g. TSLA" required value="GOOG">
+                </div>
+                <div class="input-group">
+                    <label for="benchmark-ticker">Benchmark Ticker:</label>
+                    <div id="benchmark-btn-group" class="benchmark-btn-group">
+                        <button type="button" class="benchmark-btn selected" data-value="VOO">VOO (S&P 500)</button>
+                        <button type="button" class="benchmark-btn" data-value="QQQ">QQQ (NASDAQ 100)</button>
+                        <button type="button" class="benchmark-btn" data-value="VTI">VTI (Total Market)</button>
+                        <button type="button" class="benchmark-btn" data-value="custom">Custom</button>
+                    </div>
+                    <input type="text" id="benchmark-ticker" placeholder="e.g. SPY" style="width: 120px; margin-top: 8px; display: none;" />
+                </div>
+                <div class="input-group">
+                    <label>Time Interval:</label>
+                    <div id="interval-group" class="interval-group">
+                        <button type="button" class="interval-btn" data-value="5d">5d</button>
+                        <button type="button" class="interval-btn" data-value="30d">30d</button>
+                        <button type="button" class="interval-btn" data-value="90d">90d</button>
+                        <button type="button" class="interval-btn" data-value="6mo">6Mo</button>
+                        <button type="button" class="interval-btn" data-value="1y">1Y</button>
+                        <button type="button" class="interval-btn" data-value="5y">5Y</button>
+                        <button type="button" class="interval-btn" data-value="10y">10Y</button>
+                    </div>
+                </div>
+                <button type="submit">Compare</button>
+            </form>
+            <div id="loading" style="display:none;">Loading...</div>
+            <div id="error-message"></div>
+        </aside>
+        <main class="right-pane">
+            <canvas id="performance-chart"></canvas>
+        </main>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html>
