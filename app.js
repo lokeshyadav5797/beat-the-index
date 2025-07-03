@@ -10,7 +10,7 @@ const benchmarkBtns = benchmarkBtnGroup ? benchmarkBtnGroup.querySelectorAll('.b
 const benchmarkTickerInput = document.getElementById('benchmark-ticker');
 const scaleToggle = document.getElementById('scale-toggle');
 const loadingDiv = document.getElementById('loading');
-const errorDiv = document.getElementById('error-message');
+let errorDiv = null; // Will be created dynamically when needed
 const chartCanvas = document.getElementById('performance-chart');
 const summaryStatsDiv = document.getElementById('summary-stats');
 const intervalGroup = document.getElementById('interval-group');
@@ -37,12 +37,20 @@ function setLoading(isLoading) {
 
 // Utility: Show error
 function showError(msg) {
+    if (!errorDiv) {
+        errorDiv = document.createElement('div');
+        errorDiv.id = 'error-message';
+        document.querySelector('.left-pane').appendChild(errorDiv);
+    }
     errorDiv.textContent = msg;
 }
 
 // Utility: Clear error
 function clearError() {
-    errorDiv.textContent = '';
+    if (errorDiv) {
+        errorDiv.remove();
+        errorDiv = null;
+    }
 }
 
 // Fetch historical data from Yahoo Finance (no API key required)
@@ -116,6 +124,13 @@ function renderChart(labels, relativeData, scaleType, mainLabel, benchmarkLabel)
     if (chartInstance) chartInstance.destroy();
     // Convert labels to date objects for time scale
     const dateObjs = labels.map(d => new Date(d));
+    
+    // Convert relative data to percentage format (e.g., 1.15 -> 15%, 0.94 -> -6%)
+    const percentageData = relativeData.map(value => (value - 1) * 100);
+    
+    // Determine if we should show points based on data length (for shorter intervals)
+    const shouldShowPoints = percentageData.length <= 30; // Show points for 5d and 30d intervals
+    
     chartInstance = new Chart(chartCanvas, {
         type: 'line',
         data: {
@@ -123,11 +138,11 @@ function renderChart(labels, relativeData, scaleType, mainLabel, benchmarkLabel)
             datasets: [
                 {
                     label: '',
-                    data: relativeData,
+                    data: percentageData,
                     backgroundColor: 'rgba(25, 118, 210, 0.1)',
                     fill: false,
                     tension: 0.1,
-                    pointRadius: 0,
+                    pointRadius: shouldShowPoints ? 7 : 0,
                     pointHoverRadius: 6,
                     hoverRadius: 6,
                     pointBackgroundColor: '#1976d2',
@@ -140,12 +155,12 @@ function renderChart(labels, relativeData, scaleType, mainLabel, benchmarkLabel)
                             // ctx.p0.parsed.y, ctx.p1.parsed.y are the y values of the segment ends
                             const y0 = ctx.p0.parsed.y;
                             const y1 = ctx.p1.parsed.y;
-                            // Average value for the segment
+                            // Average value for the segment (convert back to ratio for color logic)
                             const avg = (y0 + y1) / 2;
-                            if (avg >= 1) {
+                            if (avg >= 0) {
                                 // Green, darker as value increases
                                 // Clamp intensity for safety
-                                const intensity = Math.min(1, (avg - 1) / 0.5); // 0 at 1, 1 at 1.5+
+                                const intensity = Math.min(1, avg / 50); // 0 at 0%, 1 at 50%+
                                 // From #4caf50 (light green) to #145a18 (dark green)
                                 const r = Math.round(76 - 62 * intensity); // 76 to 14
                                 const g = Math.round(175 - 81 * intensity); // 175 to 94
@@ -154,7 +169,7 @@ function renderChart(labels, relativeData, scaleType, mainLabel, benchmarkLabel)
                             } else {
                                 // Red, darker as value decreases
                                 // Clamp intensity for safety
-                                const intensity = Math.min(1, (1 - avg) / 0.5); // 0 at 1, 1 at 0.5 or less
+                                const intensity = Math.min(1, Math.abs(avg) / 50); // 0 at 0%, 1 at -50% or less
                                 // From #f44336 (light red) to #7a1814 (dark red)
                                 const r = Math.round(244 - 122 * intensity); // 244 to 122
                                 const g = Math.round(67 - 53 * intensity); // 67 to 14
@@ -172,12 +187,54 @@ function renderChart(labels, relativeData, scaleType, mainLabel, benchmarkLabel)
             hover: { mode: 'nearest', intersect: false },
             plugins: {
                 legend: { display: false },
-                tooltip: { mode: 'nearest', intersect: false },
+                tooltip: { 
+                    mode: 'nearest', 
+                    intersect: false,
+                    titleFont: {
+                        size: 16,
+                        weight: 'bold'
+                    },
+                    bodyFont: {
+                        size: 16,
+                        weight: '600'
+                    },
+                    callbacks: {
+                        label: function(context) {
+                            return `Growth: ${context.parsed.y.toFixed(2)}%`;
+                        }
+                    }
+                },
             },
             scales: {
                 y: {
                     type: scaleType,
-                    title: { display: true, text: 'Relative Growth' },
+                    title: { 
+                        display: true, 
+                        text: 'Percentage Growth (%)',
+                        font: {
+                            size: 16,
+                            weight: 'bold'
+                        },
+                        color: '#2d3748'
+                    },
+                    ticks: {
+                        font: {
+                            size: 14,
+                            weight: '600'
+                        },
+                        color: '#4a5568',
+                        callback: function(value) {
+                            return value.toFixed(2) + '%';
+                        }
+                    },
+                    min: function(context) {
+                        const min = context.chart.data.datasets[0].data.reduce((a, b) => Math.min(a, b), Infinity);
+                        return Math.min(min, -5);
+                    },
+                    max: function(context) {
+                        const max = context.chart.data.datasets[0].data.reduce((a, b) => Math.max(a, b), -Infinity);
+                        return Math.max(max, 5);
+                    }
                 },
                 x: {
                     type: 'time',
@@ -191,13 +248,24 @@ function renderChart(labels, relativeData, scaleType, mainLabel, benchmarkLabel)
                         },
                         tooltipFormat: 'MMM d, yyyy'
                     },
-                    title: { display: true, text: 'Date' },
+                    title: { 
+                        display: true, 
+                        text: 'Date',
+                        font: {
+                            size: 16,
+                            weight: 'bold'
+                        },
+                        color: '#2d3748'
+                    },
                     ticks: {
                         autoSkip: true,
                         maxTicksLimit: 8,
                         major: { enabled: true },
-                        font: { weight: 'bold' },
-                        color: '#1976d2',
+                        font: { 
+                            size: 14,
+                            weight: '600' 
+                        },
+                        color: '#4a5568',
                         maxRotation: 0,
                         minRotation: 0
                     },

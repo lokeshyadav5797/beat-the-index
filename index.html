@@ -12,6 +12,7 @@
     <div class="container two-pane-layout">
         <aside class="left-pane">
             <h1>Beat the Index</h1>
+            <p class="subtitle">Shows the relative growth of a stock against a benchmark</p>
             <form id="stock-form">
                 <div class="input-group">
                     <label for="main-ticker">Stock Ticker:</label>
@@ -42,7 +43,6 @@
                 <button type="submit">Compare</button>
             </form>
             <div id="loading" style="display:none;">Loading...</div>
-            <div id="error-message"></div>
         </aside>
         <main class="right-pane">
             <canvas id="performance-chart"></canvas>
