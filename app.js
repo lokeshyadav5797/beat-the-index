@@ -74,10 +74,12 @@ async function fetchStockData(symbol, intervalKey) {
 function processData(yahooResult, days) {
     const timestamps = yahooResult.timestamp;
     const prices = yahooResult.indicators.adjclose[0].adjclose;
-    // Convert timestamps to YYYY-MM-DD
+    // Convert timestamps to YYYY-MM-DD in PST timezone
     const dates = timestamps.map(ts => {
         const d = new Date(ts * 1000);
-        return d.toISOString().slice(0, 10);
+        // Convert to PST (UTC-8) or PDT (UTC-7) based on daylight saving
+        const pstDate = new Date(d.toLocaleString("en-US", {timeZone: "America/Los_Angeles"}));
+        return pstDate.toISOString().slice(0, 10);
     });
     // Only keep last N days (if available)
     const slicedDates = dates.slice(-days);
@@ -120,10 +122,14 @@ function normalizeToOne(arr) {
 }
 
 // Render Chart.js chart (single line: relative price)
-function renderChart(labels, relativeData, scaleType, mainLabel, benchmarkLabel) {
+function renderChart(labels, relativeData, scaleType, mainLabel, benchmarkLabel, mainPrices, benchPrices) {
     if (chartInstance) chartInstance.destroy();
-    // Convert labels to date objects for time scale
-    const dateObjs = labels.map(d => new Date(d));
+    // Convert labels to date objects for time scale in PST timezone
+    const dateObjs = labels.map(d => {
+        // Create date in PST timezone
+        const pstDate = new Date(d + 'T00:00:00');
+        return new Date(pstDate.toLocaleString("en-US", {timeZone: "America/Los_Angeles"}));
+    });
     
     // Convert relative data to percentage format (e.g., 1.15 -> 15%, 0.94 -> -6%)
     const percentageData = relativeData.map(value => (value - 1) * 100);
@@ -200,7 +206,15 @@ function renderChart(labels, relativeData, scaleType, mainLabel, benchmarkLabel)
                     },
                     callbacks: {
                         label: function(context) {
-                            return `Growth: ${context.parsed.y.toFixed(2)}%`;
+                            const index = context.dataIndex;
+                            const relativeGrowth = context.parsed.y.toFixed(2);
+                            const mainPrice = mainPrices[index] ? mainPrices[index].toFixed(2) : 'N/A';
+                            const benchPrice = benchPrices[index] ? benchPrices[index].toFixed(2) : 'N/A';
+                            return [
+                                `Relative Growth: ${relativeGrowth}%`,
+                                `${mainLabel}: $${mainPrice}`,
+                                `${benchmarkLabel}: $${benchPrice}`
+                            ];
                         }
                     }
                 },
@@ -210,7 +224,7 @@ function renderChart(labels, relativeData, scaleType, mainLabel, benchmarkLabel)
                     type: scaleType,
                     title: { 
                         display: true, 
-                        text: 'Percentage Growth (%)',
+                        text: 'Relative Growth (%)',
                         font: {
                             size: 16,
                             weight: 'bold'
@@ -312,6 +326,12 @@ intervalGroup.addEventListener('click', (e) => {
         // Remove 'selected' from all, add to clicked
         document.querySelectorAll('.interval-btn').forEach(btn => btn.classList.remove('selected'));
         e.target.classList.add('selected');
+        
+        // Auto-refresh chart if we have data to work with
+        if (mainTickerInput.value.trim() && (selectedBenchmark !== 'custom' || benchmarkTickerInput.value.trim())) {
+            // Trigger the form submission to refresh the chart
+            form.dispatchEvent(new Event('submit'));
+        }
     }
 });
 
@@ -363,7 +383,7 @@ form.addEventListener('submit', async (e) => {
         // Compute relative price (stock / benchmark), normalized to 1.0
         const relativePricesRaw = mainPrices.map((p, i) => p / benchPrices[i]);
         const relativePrices = normalizeToOne(relativePricesRaw);
-        renderChart(commonDates, relativePrices, scaleType, mainTicker, benchmarkTicker);
+        renderChart(commonDates, relativePrices, scaleType, mainTicker, benchmarkTicker, mainPrices, benchPrices);
     } catch (err) {
         showError(err.message || 'Failed to fetch data.');
         if (chartInstance) chartInstance.destroy();
