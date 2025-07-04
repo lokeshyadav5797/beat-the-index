@@ -604,6 +604,121 @@ button[type="submit"]:active {
     }
 }
 
+@media (max-width: 480px) {
+    .container {
+        margin: 4px;
+        min-height: unset;
+        height: auto;
+        border-radius: 12px;
+        box-shadow: none;
+    }
+    .two-pane-layout {
+        flex-direction: column;
+        min-height: unset;
+    }
+    .left-pane {
+        padding: 16px 8px;
+        border-radius: 0;
+        border-right: none;
+        border-bottom: 1px solid var(--border-color);
+        gap: 20px;
+    }
+    .right-pane {
+        padding: 12px 4px;
+        min-height: 300px;
+    }
+    .header-section {
+        flex-direction: column;
+        gap: 8px;
+        margin-bottom: 12px;
+    }
+    h1 {
+        font-size: 1.2rem;
+        line-height: 1.1;
+        margin-bottom: 2px;
+    }
+    .subtitle {
+        font-size: 0.9rem;
+        margin: 4px 0 0 0;
+    }
+    .dark-mode-toggle {
+        width: 38px;
+        height: 38px;
+        padding: 6px;
+    }
+    #stock-form {
+        padding: 10px;
+        gap: 16px;
+    }
+    .input-group label {
+        font-size: 0.8rem;
+    }
+    input[type="text"], #benchmark-ticker {
+        padding: 12px 10px;
+        font-size: 0.95rem;
+        width: 100%;
+    }
+    .benchmark-btn-group, .interval-group {
+        grid-template-columns: 1fr;
+        gap: 6px;
+    }
+    .benchmark-btn, .interval-btn, button[type="submit"] {
+        font-size: 0.95rem;
+        padding: 12px 0;
+        width: 100%;
+        min-width: 0;
+    }
+    button[type="submit"] {
+        padding: 14px 0;
+        font-size: 1rem;
+    }
+    #performance-chart {
+        min-height: 180px;
+        max-height: 30vh;
+        margin-bottom: 8px;
+        border-radius: 8px;
+    }
+    #summary-stats {
+        padding: 8px 4px;
+        font-size: 0.9rem;
+    }
+    .summary-grid {
+        grid-template-columns: 1fr;
+        gap: 6px;
+    }
+    .summary-item {
+        padding: 6px;
+        font-size: 0.9rem;
+    }
+    .summary-value {
+        font-size: 1rem;
+    }
+    .summary-cagr {
+        font-size: 0.7rem;
+    }
+    body {
+        padding: 2px;
+    }
+}
+
+@media (max-width: 375px) {
+    .container, .right-pane, .left-pane {
+        padding: 0 !important;
+    }
+    h1 {
+        font-size: 1rem;
+    }
+    .subtitle {
+        font-size: 0.8rem;
+    }
+    .summary-value {
+        font-size: 0.9rem;
+    }
+    .summary-cagr {
+        font-size: 0.65rem;
+    }
+}
+
 /* Smooth Animations */
 * {
     transition: all 0.3s ease;
