@@ -55,19 +55,29 @@ function clearError() {
 
 // Fetch historical data from Yahoo Finance (no API key required)
 async function fetchStockData(symbol, intervalKey) {
+    console.log(`Fetching data for ${symbol} with interval ${intervalKey}`);
     const { range, interval } = INTERVAL_MAP[intervalKey];
     // Yahoo Finance unofficial endpoint (CORS proxy needed for browser)
     const proxy = 'https://corsproxy.io/?';
     const url = `${proxy}https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?range=${range}&interval=${interval}&includeAdjustedClose=true`;
-    const resp = await fetch(url);
-    if (!resp.ok) throw new Error('Network error');
-    const data = await resp.json();
-    if (!data.chart || data.chart.error) {
-        throw new Error(data.chart?.error?.description || 'API error');
+    console.log('Fetching URL:', url);
+    
+    try {
+        const resp = await fetch(url);
+        console.log('Response status:', resp.status);
+        if (!resp.ok) throw new Error(`Network error: ${resp.status}`);
+        const data = await resp.json();
+        console.log('Response data:', data);
+        if (!data.chart || data.chart.error) {
+            throw new Error(data.chart?.error?.description || 'API error');
+        }
+        const result = data.chart.result[0];
+        if (!result) throw new Error('No data found for ' + symbol);
+        return result;
+    } catch (error) {
+        console.error('Error fetching data for', symbol, ':', error);
+        throw error;
     }
-    const result = data.chart.result[0];
-    if (!result) throw new Error('No data found for ' + symbol);
-    return result;
 }
 
 // Parse and align data for charting (Yahoo Finance)
@@ -300,11 +310,39 @@ function renderSummaryStats(main, benchmark, intervalKey, mainLabel, benchmarkLa
     const benchGrowth = percentGrowth(benchmark.prices).toFixed(2);
     const mainCAGR = calculateCAGR(main.prices, years).toFixed(2);
     const benchCAGR = calculateCAGR(benchmark.prices, years).toFixed(2);
-    const mainAvg = averageDailyReturn(main.prices).toFixed(2);
-    const benchAvg = averageDailyReturn(benchmark.prices).toFixed(2);
+    
+    // Determine performance colors
+    const mainGrowthClass = parseFloat(mainGrowth) >= 0 ? 'positive' : 'negative';
+    const benchGrowthClass = parseFloat(benchGrowth) >= 0 ? 'positive' : 'negative';
+    const mainCAGRClass = parseFloat(mainCAGR) >= 0 ? 'positive' : 'negative';
+    const benchCAGRClass = parseFloat(benchCAGR) >= 0 ? 'positive' : 'negative';
+    
+    // Get interval display name
+    const intervalNames = {
+        '5d': '5 Days',
+        '30d': '30 Days', 
+        '90d': '90 Days',
+        '6mo': '6 Months',
+        '1y': '1 Year',
+        '5y': '5 Years',
+        '10y': '10 Years'
+    };
+    
     summaryStatsDiv.innerHTML = `
-        <strong>${mainLabel}</strong>: ${mainGrowth}% total, CAGR: ${mainCAGR}%, Avg Daily: ${mainAvg}%<br>
-        <strong>${benchmarkLabel}</strong>: ${benchGrowth}% total, CAGR: ${benchCAGR}%, Avg Daily: ${benchAvg}%
+        <div class="summary-grid">
+            <div class="summary-item">
+                <span class="summary-label">${intervalNames[intervalKey]} Performance</span>
+                <span class="summary-ticker">${mainLabel}</span>
+                <span class="summary-value ${mainGrowthClass}">${mainGrowth}%</span>
+                <span class="summary-cagr ${mainCAGRClass}">CAGR: ${mainCAGR}%</span>
+            </div>
+            <div class="summary-item">
+                <span class="summary-label">${intervalNames[intervalKey]} Performance</span>
+                <span class="summary-ticker">${benchmarkLabel}</span>
+                <span class="summary-value ${benchGrowthClass}">${benchGrowth}%</span>
+                <span class="summary-cagr ${benchCAGRClass}">CAGR: ${benchCAGR}%</span>
+            </div>
+        </div>
     `;
 }
 
@@ -318,7 +356,37 @@ function updateIntervalButtons() {
         }
     });
 }
-updateIntervalButtons();
+
+// Set default values and load initial chart
+function initializeApp() {
+    console.log('Initializing app...');
+    
+    // Update UI to reflect default selections (main ticker and benchmark are already set in HTML)
+    updateIntervalButtons();
+    
+    console.log('About to trigger form submission...');
+    // Load the chart with default values after a short delay to ensure everything is ready
+    setTimeout(() => {
+        console.log('Triggering form submission...');
+        form.dispatchEvent(new Event('submit'));
+    }, 100);
+}
+
+// Initialize the app when the page loads
+document.addEventListener('DOMContentLoaded', () => {
+    // Wait for Chart.js to be available
+    if (typeof Chart === 'undefined') {
+        console.log('Chart.js not loaded yet, waiting...');
+        setTimeout(() => {
+            updateIntervalButtons();
+            initializeApp();
+        }, 500);
+    } else {
+        console.log('Chart.js is available, initializing...');
+        updateIntervalButtons();
+        initializeApp();
+    }
+});
 
 intervalGroup.addEventListener('click', (e) => {
     if (e.target.classList.contains('interval-btn')) {
@@ -348,12 +416,24 @@ if (benchmarkBtnGroup) {
             } else {
                 benchmarkTickerInput.style.display = 'none';
             }
+            
+            // Auto-refresh chart if we have data to work with
+            if (mainTickerInput.value.trim() && (selectedBenchmark !== 'custom' || benchmarkTickerInput.value.trim())) {
+                // Trigger the form submission to refresh the chart
+                form.dispatchEvent(new Event('submit'));
+            }
         }
     });
 }
 
 // Main form handler
 form.addEventListener('submit', async (e) => {
+    console.log('Form submitted with:', {
+        mainTicker: mainTickerInput.value.trim(),
+        selectedBenchmark,
+        selectedInterval
+    });
+    
     e.preventDefault();
     clearError();
     setLoading(true);
@@ -384,6 +464,7 @@ form.addEventListener('submit', async (e) => {
         const relativePricesRaw = mainPrices.map((p, i) => p / benchPrices[i]);
         const relativePrices = normalizeToOne(relativePricesRaw);
         renderChart(commonDates, relativePrices, scaleType, mainTicker, benchmarkTicker, mainPrices, benchPrices);
+        renderSummaryStats(main, bench, intervalKey, mainTicker, benchmarkTicker);
     } catch (err) {
         showError(err.message || 'Failed to fetch data.');
         if (chartInstance) chartInstance.destroy();
