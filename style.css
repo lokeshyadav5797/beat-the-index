@@ -60,7 +60,7 @@ body {
 .container {
     max-width: 1400px;
     margin: 0 auto;
-    height: calc(100vh - 40px); /* Fixed height instead of min-height */
+    min-height: calc(100vh - 40px); /* Changed from height to min-height */
     display: flex;
     gap: 0;
     background: var(--container-bg);
