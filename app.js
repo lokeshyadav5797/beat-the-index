@@ -17,8 +17,16 @@ const intervalGroup = document.getElementById('interval-group');
 const darkModeToggle = document.getElementById('dark-mode-toggle');
 let selectedInterval = '1y'; // Default
 let selectedBenchmark = 'VOO';
+const priceTypeDropdown = document.getElementById('price-type-toggle-dropdown');
+const priceTypeToggleBtn = document.getElementById('price-type-toggle');
+const priceTypeMenu = priceTypeDropdown ? priceTypeDropdown.querySelector('.dropdown-menu') : null;
+let selectedPriceType = 'close';
 
 let chartInstance = null;
+
+const compareBtn = form.querySelector('button[type="submit"]');
+const loadingBtnText = document.getElementById('loading-btn-text');
+let loadingTimeout = null;
 
 // Map UI interval to Yahoo Finance range/interval
 const INTERVAL_MAP = {
@@ -31,9 +39,19 @@ const INTERVAL_MAP = {
     '10y': { range: '10y', interval: '1wk', days: 365*10 },
 };
 
-// Utility: Show/hide loading
+// Utility: Show/hide loading in button after 2s delay
 function setLoading(isLoading) {
-    loadingDiv.style.display = isLoading ? 'block' : 'none';
+    if (isLoading) {
+        // Set a timeout to show loading after 2 seconds
+        loadingTimeout = setTimeout(() => {
+            if (loadingBtnText) loadingBtnText.textContent = 'Loading...';
+            if (compareBtn) compareBtn.disabled = true;
+        }, 2000);
+    } else {
+        clearTimeout(loadingTimeout);
+        if (loadingBtnText) loadingBtnText.textContent = 'Compare';
+        if (compareBtn) compareBtn.disabled = false;
+    }
 }
 
 // Utility: Show error
@@ -55,7 +73,7 @@ function clearError() {
 }
 
 // Fetch historical data from Yahoo Finance (no API key required)
-async function fetchStockData(symbol, intervalKey) {
+async function fetchStockData(symbol, intervalKey, priceType) {
     console.log(`Fetching data for ${symbol} with interval ${intervalKey}`);
     const { range, interval } = INTERVAL_MAP[intervalKey];
     // Yahoo Finance unofficial endpoint (CORS proxy needed for browser)
@@ -82,9 +100,14 @@ async function fetchStockData(symbol, intervalKey) {
 }
 
 // Parse and align data for charting (Yahoo Finance)
-function processData(yahooResult, days) {
+function processData(yahooResult, days, priceType) {
     const timestamps = yahooResult.timestamp;
-    const prices = yahooResult.indicators.adjclose[0].adjclose;
+    let prices;
+    if (priceType === 'adjclose') {
+        prices = yahooResult.indicators.adjclose[0].adjclose;
+    } else {
+        prices = yahooResult.indicators.quote[0].close;
+    }
     // Convert timestamps to YYYY-MM-DD in PST timezone
     const dates = timestamps.map(ts => {
         const d = new Date(ts * 1000);
@@ -153,6 +176,11 @@ function renderChart(labels, relativeData, scaleType, mainLabel, benchmarkLabel,
     const textColor = isDark ? '#e2e8f0' : '#2d3748';
     const gridColor = isDark ? 'rgba(160, 174, 192, 0.2)' : 'rgba(226, 232, 240, 0.5)';
     const pointBorderColor = isDark ? '#2d3748' : '#fff';
+    
+    // Get the latest value of growth
+    const latestGrowth = percentageData[percentageData.length - 1];
+    // Choose a color for the annotation and tick
+    const annotationColor = latestGrowth >= 0 ? '#38a169' : '#e53e3e'; // green for positive, red for negative
     
     chartInstance = new Chart(chartCanvas, {
         type: 'line',
@@ -235,6 +263,56 @@ function renderChart(labels, relativeData, scaleType, mainLabel, benchmarkLabel,
                         }
                     }
                 },
+                annotation: {
+                    annotations: {
+                        latestGrowthLine: {
+                            type: 'line',
+                            yMin: latestGrowth,
+                            yMax: latestGrowth,
+                            borderColor: annotationColor,
+                            borderWidth: 2,
+                            borderDash: [6, 6],
+                            label: {
+                                display: true,
+                                content: latestGrowth.toFixed(2) + '%',
+                                position: 'end',
+                                backgroundColor: annotationColor,
+                                color: '#fff',
+                                font: {
+                                    weight: 'bold',
+                                    size: 12
+                                },
+                                xAdjust: 10,
+                                yAdjust: 0,
+                                padding: 6,
+                                cornerRadius: 6
+                            }
+                        },
+                        zeroLine: {
+                            type: 'line',
+                            yMin: 0,
+                            yMax: 0,
+                            borderColor: '#000',
+                            borderWidth: 2,
+                            borderDash: [],
+                            label: {
+                                display: true,
+                                content: '0%',
+                                position: 'end',
+                                backgroundColor: '#000',
+                                color: '#fff',
+                                font: {
+                                    weight: 'bold',
+                                    size: 12
+                                },
+                                xAdjust: 10,
+                                yAdjust: 0,
+                                padding: 6,
+                                cornerRadius: 6
+                            }
+                        }
+                    }
+                }
             },
             scales: {
                 y: {
@@ -253,7 +331,13 @@ function renderChart(labels, relativeData, scaleType, mainLabel, benchmarkLabel,
                             size: 14,
                             weight: '600'
                         },
-                        color: textColor,
+                        color: function(context) {
+                            // Highlight the latest value tick in annotationColor
+                            if (context.tick.value === Math.round(latestGrowth * 100) / 100) {
+                                return annotationColor;
+                            }
+                            return textColor;
+                        },
                         callback: function(value) {
                             return value.toFixed(2) + '%';
                         }
@@ -268,6 +352,40 @@ function renderChart(labels, relativeData, scaleType, mainLabel, benchmarkLabel,
                     },
                     grid: {
                         color: gridColor
+                    }
+                },
+                y2: {
+                    position: 'right',
+                    display: true,
+                    grid: { drawOnChartArea: false, display: false },
+                    ticks: {
+                        color: annotationColor,
+                        font: { size: 14, weight: 'bold' },
+                        callback: function(value) {
+                            // Only show the latest growth value
+                            if (Math.abs(value - latestGrowth) < 0.01) {
+                                return latestGrowth.toFixed(2) + '%';
+                            }
+                            return '';
+                        },
+                        major: { enabled: true },
+                        minRotation: 0,
+                        maxRotation: 0,
+                        autoSkip: false,
+                        padding: 8
+                    },
+                    min: function(context) {
+                        const min = context.chart.data.datasets[0].data.reduce((a, b) => Math.min(a, b), Infinity);
+                        return Math.min(min, -5);
+                    },
+                    max: function(context) {
+                        const max = context.chart.data.datasets[0].data.reduce((a, b) => Math.max(a, b), -Infinity);
+                        return Math.max(max, 5);
+                    },
+                    title: { display: false },
+                    border: { display: false },
+                    afterBuildTicks: function(axis) {
+                        axis.ticks = [{ value: latestGrowth }];
                     }
                 },
                 x: {
@@ -383,8 +501,6 @@ function initializeApp() {
     }, 100);
 }
 
-
-
 intervalGroup.addEventListener('click', (e) => {
     if (e.target.classList.contains('interval-btn')) {
         selectedInterval = e.target.dataset.value;
@@ -428,7 +544,8 @@ form.addEventListener('submit', async (e) => {
     console.log('Form submitted with:', {
         mainTicker: mainTickerInput.value.trim(),
         selectedBenchmark,
-        selectedInterval
+        selectedInterval,
+        selectedPriceType
     });
     
     e.preventDefault();
@@ -445,12 +562,12 @@ form.addEventListener('submit', async (e) => {
         if (!mainTicker || !benchmarkTicker) throw new Error('Please enter both ticker symbols.');
         // Fetch data in parallel
         const [mainTS, benchTS] = await Promise.all([
-            fetchStockData(mainTicker, intervalKey),
-            fetchStockData(benchmarkTicker, intervalKey)
+            fetchStockData(mainTicker, intervalKey, selectedPriceType),
+            fetchStockData(benchmarkTicker, intervalKey, selectedPriceType)
         ]);
         const days = INTERVAL_MAP[intervalKey].days;
-        const main = processData(mainTS, days);
-        const bench = processData(benchTS, days);
+        const main = processData(mainTS, days, selectedPriceType);
+        const bench = processData(benchTS, days, selectedPriceType);
         // Align dates (intersection)
         const commonDates = main.dates.filter(d => bench.dates.includes(d));
         const mainIdx = main.dates.map((d, i) => commonDates.includes(d) ? i : -1).filter(i => i !== -1);
@@ -535,4 +652,87 @@ document.addEventListener('DOMContentLoaded', () => {
         updateIntervalButtons();
         initializeApp();
     }
-}); 
+});
+
+function setPriceType(value, label) {
+    selectedPriceType = value;
+    priceTypeToggleBtn.textContent = label;
+    // Update aria-selected
+    priceTypeMenu.querySelectorAll('.dropdown-option').forEach(opt => {
+        opt.setAttribute('aria-selected', opt.dataset.value === value ? 'true' : 'false');
+    });
+    // Close menu
+    priceTypeDropdown.setAttribute('aria-expanded', 'false');
+    priceTypeMenu.style.display = 'none';
+    // Auto-refresh chart if we have data to work with
+    if (mainTickerInput.value.trim() && (selectedBenchmark !== 'custom' || benchmarkTickerInput.value.trim())) {
+        form.dispatchEvent(new Event('submit'));
+    }
+}
+
+if (priceTypeDropdown && priceTypeToggleBtn && priceTypeMenu) {
+    priceTypeDropdown.setAttribute('aria-expanded', 'false');
+    priceTypeToggleBtn.addEventListener('click', (e) => {
+        const expanded = priceTypeDropdown.getAttribute('aria-expanded') === 'true';
+        priceTypeDropdown.setAttribute('aria-expanded', String(!expanded));
+        priceTypeMenu.style.display = !expanded ? 'block' : 'none';
+    });
+    // Allow clicking the label to open the dropdown
+    const priceTypeLabel = document.querySelector('label[for="price-type-toggle-dropdown"]');
+    if (priceTypeLabel) {
+        priceTypeLabel.addEventListener('click', () => {
+            priceTypeDropdown.setAttribute('aria-expanded', 'true');
+            priceTypeMenu.style.display = 'block';
+            priceTypeMenu.querySelector('.dropdown-option[aria-selected="true"]').focus();
+        });
+    }
+    priceTypeToggleBtn.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            priceTypeDropdown.setAttribute('aria-expanded', 'true');
+            priceTypeMenu.style.display = 'block';
+            priceTypeMenu.querySelector('.dropdown-option[aria-selected="true"]').focus();
+        }
+    });
+    priceTypeMenu.addEventListener('click', (e) => {
+        if (e.target.classList.contains('dropdown-option')) {
+            setPriceType(e.target.dataset.value, e.target.textContent);
+        }
+    });
+    // Keyboard navigation for options
+    priceTypeMenu.querySelectorAll('.dropdown-option').forEach(opt => {
+        opt.tabIndex = 0;
+        opt.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                (opt.nextElementSibling || priceTypeMenu.firstElementChild).focus();
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                (opt.previousElementSibling || priceTypeMenu.lastElementChild).focus();
+            } else if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                setPriceType(opt.dataset.value, opt.textContent);
+            } else if (e.key === 'Escape') {
+                priceTypeDropdown.setAttribute('aria-expanded', 'false');
+                priceTypeMenu.style.display = 'none';
+                priceTypeToggleBtn.focus();
+            }
+        });
+    });
+    // Close dropdown on outside click
+    document.addEventListener('mousedown', (e) => {
+        if (!priceTypeDropdown.contains(e.target)) {
+            priceTypeDropdown.setAttribute('aria-expanded', 'false');
+            priceTypeMenu.style.display = 'none';
+        }
+    });
+    // Close dropdown on blur
+    priceTypeDropdown.addEventListener('blur', () => {
+        setTimeout(() => {
+            if (!priceTypeDropdown.contains(document.activeElement)) {
+                priceTypeDropdown.setAttribute('aria-expanded', 'false');
+                priceTypeMenu.style.display = 'none';
+            }
+        }, 100);
+    }, true);
+} 
