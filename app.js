@@ -14,6 +14,7 @@ let errorDiv = null; // Will be created dynamically when needed
 const chartCanvas = document.getElementById('performance-chart');
 const summaryStatsDiv = document.getElementById('summary-stats');
 const intervalGroup = document.getElementById('interval-group');
+const darkModeToggle = document.getElementById('dark-mode-toggle');
 let selectedInterval = '1y'; // Default
 let selectedBenchmark = 'VOO';
 
@@ -147,6 +148,12 @@ function renderChart(labels, relativeData, scaleType, mainLabel, benchmarkLabel,
     // Determine if we should show points based on data length (for shorter intervals)
     const shouldShowPoints = percentageData.length <= 30; // Show points for 5d and 30d intervals
     
+    // Get theme-aware colors
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    const textColor = isDark ? '#e2e8f0' : '#2d3748';
+    const gridColor = isDark ? 'rgba(160, 174, 192, 0.2)' : 'rgba(226, 232, 240, 0.5)';
+    const pointBorderColor = isDark ? '#2d3748' : '#fff';
+    
     chartInstance = new Chart(chartCanvas, {
         type: 'line',
         data: {
@@ -162,7 +169,7 @@ function renderChart(labels, relativeData, scaleType, mainLabel, benchmarkLabel,
                     pointHoverRadius: 6,
                     hoverRadius: 6,
                     pointBackgroundColor: '#1976d2',
-                    pointBorderColor: '#fff',
+                    pointBorderColor: pointBorderColor,
                     pointBorderWidth: 2,
                     pointHitRadius: 8,
                     pointHoverBackgroundColor: '#1976d2',
@@ -239,14 +246,14 @@ function renderChart(labels, relativeData, scaleType, mainLabel, benchmarkLabel,
                             size: 16,
                             weight: 'bold'
                         },
-                        color: '#2d3748'
+                        color: textColor
                     },
                     ticks: {
                         font: {
                             size: 14,
                             weight: '600'
                         },
-                        color: '#4a5568',
+                        color: textColor,
                         callback: function(value) {
                             return value.toFixed(2) + '%';
                         }
@@ -258,6 +265,9 @@ function renderChart(labels, relativeData, scaleType, mainLabel, benchmarkLabel,
                     max: function(context) {
                         const max = context.chart.data.datasets[0].data.reduce((a, b) => Math.max(a, b), -Infinity);
                         return Math.max(max, 5);
+                    },
+                    grid: {
+                        color: gridColor
                     }
                 },
                 x: {
@@ -279,7 +289,7 @@ function renderChart(labels, relativeData, scaleType, mainLabel, benchmarkLabel,
                             size: 16,
                             weight: 'bold'
                         },
-                        color: '#2d3748'
+                        color: textColor
                     },
                     ticks: {
                         autoSkip: true,
@@ -289,12 +299,13 @@ function renderChart(labels, relativeData, scaleType, mainLabel, benchmarkLabel,
                             size: 14,
                             weight: '600' 
                         },
-                        color: '#4a5568',
+                        color: textColor,
                         maxRotation: 0,
                         minRotation: 0
                     },
                     grid: {
-                        drawOnChartArea: false
+                        drawOnChartArea: false,
+                        color: gridColor
                     }
                 }
             }
@@ -372,21 +383,7 @@ function initializeApp() {
     }, 100);
 }
 
-// Initialize the app when the page loads
-document.addEventListener('DOMContentLoaded', () => {
-    // Wait for Chart.js to be available
-    if (typeof Chart === 'undefined') {
-        console.log('Chart.js not loaded yet, waiting...');
-        setTimeout(() => {
-            updateIntervalButtons();
-            initializeApp();
-        }, 500);
-    } else {
-        console.log('Chart.js is available, initializing...');
-        updateIntervalButtons();
-        initializeApp();
-    }
-});
+
 
 intervalGroup.addEventListener('click', (e) => {
     if (e.target.classList.contains('interval-btn')) {
@@ -470,5 +467,72 @@ form.addEventListener('submit', async (e) => {
         if (chartInstance) chartInstance.destroy();
     } finally {
         setLoading(false);
+    }
+});
+
+// Dark Mode Toggle Functionality
+function initDarkMode() {
+    // Check for saved theme preference or default to light mode
+    const savedTheme = localStorage.getItem('theme') || 'light';
+    document.documentElement.setAttribute('data-theme', savedTheme);
+    
+    // Update chart colors if chart exists
+    if (chartInstance) {
+        updateChartTheme();
+    }
+}
+
+function toggleDarkMode() {
+    const currentTheme = document.documentElement.getAttribute('data-theme');
+    const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+    
+    document.documentElement.setAttribute('data-theme', newTheme);
+    localStorage.setItem('theme', newTheme);
+    
+    // Update chart colors
+    if (chartInstance) {
+        updateChartTheme();
+    }
+}
+
+function updateChartTheme() {
+    if (!chartInstance) return;
+    
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    const textColor = isDark ? '#e2e8f0' : '#2d3748';
+    const gridColor = isDark ? 'rgba(160, 174, 192, 0.2)' : 'rgba(226, 232, 240, 0.5)';
+    
+    // Update chart options
+    chartInstance.options.plugins.legend.labels.color = textColor;
+    chartInstance.options.scales.x.ticks.color = textColor;
+    chartInstance.options.scales.y.ticks.color = textColor;
+    chartInstance.options.scales.x.title.color = textColor;
+    chartInstance.options.scales.y.title.color = textColor;
+    chartInstance.options.scales.x.grid.color = gridColor;
+    chartInstance.options.scales.y.grid.color = gridColor;
+    
+    chartInstance.update();
+}
+
+// Initialize dark mode when page loads
+document.addEventListener('DOMContentLoaded', () => {
+    initDarkMode();
+    
+    // Add event listener for dark mode toggle
+    if (darkModeToggle) {
+        darkModeToggle.addEventListener('click', toggleDarkMode);
+    }
+    
+    // Wait for Chart.js to be available
+    if (typeof Chart === 'undefined') {
+        console.log('Chart.js not loaded yet, waiting...');
+        setTimeout(() => {
+            updateIntervalButtons();
+            initializeApp();
+        }, 500);
+    } else {
+        console.log('Chart.js is available, initializing...');
+        updateIntervalButtons();
+        initializeApp();
     }
 }); 
