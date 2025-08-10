@@ -15,8 +15,12 @@ const chartCanvas = document.getElementById('performance-chart');
 const summaryStatsDiv = document.getElementById('summary-stats');
 const intervalGroup = document.getElementById('interval-group');
 const darkModeToggle = document.getElementById('dark-mode-toggle');
+const yearDropdownContainer = document.getElementById('year-dropdown-container');
+const yearSelect = document.getElementById('year-select');
 let selectedInterval = '1y'; // Default
 let selectedBenchmark = 'VOO';
+let selectedYear = 2017; // Default to 2017
+console.log('Initial selectedYear:', selectedYear);
 const priceTypeDropdown = document.getElementById('price-type-toggle-dropdown');
 const priceTypeToggleBtn = document.getElementById('price-type-toggle');
 const priceTypeMenu = priceTypeDropdown ? priceTypeDropdown.querySelector('.dropdown-menu') : null;
@@ -30,13 +34,14 @@ let loadingTimeout = null;
 
 // Map UI interval to Yahoo Finance range/interval
 const INTERVAL_MAP = {
-    '5d': { range: '5d', interval: '1d', days: 5 },
     '30d': { range: '1mo', interval: '1d', days: 30 },
     '90d': { range: '3mo', interval: '1d', days: 90 },
     '6mo': { range: '6mo', interval: '1d', days: 182 },
+    'ytd': { range: 'ytd', interval: '1d', days: 0 }, // Will be calculated dynamically
     '1y': { range: '1y', interval: '1d', days: 365 },
     '5y': { range: '5y', interval: '1wk', days: 365*5 },
     '10y': { range: '10y', interval: '1wk', days: 365*10 },
+    'since': { range: 'max', interval: '1wk', days: -1 }, // Will be calculated dynamically based on selected year
 };
 
 // Utility: Show/hide loading in button after 2s delay
@@ -115,10 +120,76 @@ function processData(yahooResult, days, priceType) {
         const pstDate = new Date(d.toLocaleString("en-US", {timeZone: "America/Los_Angeles"}));
         return pstDate.toISOString().slice(0, 10);
     });
-    // Only keep last N days (if available)
-    const slicedDates = dates.slice(-days);
-    const slicedPrices = prices.slice(-days);
-    return { dates: slicedDates, prices: slicedPrices };
+    
+    // Handle YTD case - calculate actual days from start of year
+    let actualDays = days;
+    if (days === 0) { // YTD case
+        const currentDate = new Date();
+        const startOfYear = new Date(currentDate.getFullYear(), 0, 1); // January 1st of current year
+        actualDays = Math.ceil((currentDate - startOfYear) / (1000 * 60 * 60 * 24));
+        
+        // Only keep last N days (if available)
+        const slicedDates = dates.slice(-actualDays);
+        const slicedPrices = prices.slice(-actualDays);
+        return { dates: slicedDates, prices: slicedPrices };
+    } else if (days === -1) { // Since case - filter by actual date range
+        const currentDate = new Date();
+        const startOfSelectedYear = new Date(selectedYear, 0, 1); // January 1st of selected year
+        const startOfSelectedYearStr = startOfSelectedYear.toISOString().slice(0, 10);
+        
+        console.log('Since case: filtering data from', startOfSelectedYearStr, 'to current date');
+        console.log('Since case: selectedYear =', selectedYear, 'startOfSelectedYear =', startOfSelectedYear);
+        console.log('Since case: original data has', dates.length, 'data points');
+        
+        // Filter data to only include dates from the selected year onwards
+        const filteredData = dates.map((date, index) => ({ date, price: prices[index] }))
+            .filter(item => item.date >= startOfSelectedYearStr)
+            .filter(item => item.price !== null && item.price !== undefined); // Remove any null/undefined prices
+        
+        const filteredDates = filteredData.map(item => item.date);
+        const filteredPrices = filteredData.map(item => item.price);
+        
+        console.log('Since case: filtered data from', dates.length, 'data points to', filteredDates.length, 'data points');
+        
+        // If no data found after filtering, try to find the earliest available data
+        if (filteredDates.length === 0) {
+            console.log('Since case: no data found after filtering! Trying to find earliest available data...');
+            
+            // Find the earliest available data point
+            const validData = dates.map((date, index) => ({ date, price: prices[index] }))
+                .filter(item => item.price !== null && item.price !== undefined);
+            
+            if (validData.length > 0) {
+                // Sort by date to find the earliest
+                validData.sort((a, b) => a.date.localeCompare(b.date));
+                const earliestDate = validData[0].date;
+                console.log('Since case: earliest available data is from', earliestDate);
+                
+                // Use all available data from the earliest date
+                const fallbackDates = validData.map(item => item.date);
+                const fallbackPrices = validData.map(item => item.price);
+                
+                console.log('Since case: using fallback data from', fallbackDates.length, 'data points');
+                console.log('Since case: fallback date range from', fallbackDates[0], 'to', fallbackDates[fallbackDates.length - 1]);
+                
+                return { dates: fallbackDates, prices: fallbackPrices };
+            } else {
+                console.log('Since case: no valid data found at all!');
+                throw new Error(`No data available for the selected time period. Try selecting a different year or time interval.`);
+            }
+        }
+        
+        if (filteredDates.length > 0) {
+            console.log('Since case: date range from', filteredDates[0], 'to', filteredDates[filteredDates.length - 1]);
+        }
+        
+        return { dates: filteredDates, prices: filteredPrices };
+    } else {
+        // Only keep last N days (if available) for other intervals
+        const slicedDates = dates.slice(-actualDays);
+        const slicedPrices = prices.slice(-actualDays);
+        return { dates: slicedDates, prices: slicedPrices };
+    }
 }
 
 // Normalize prices to initial value (for relative growth)
@@ -157,7 +228,12 @@ function normalizeToOne(arr) {
 
 // Render Chart.js chart (single line: relative price)
 function renderChart(labels, relativeData, scaleType, mainLabel, benchmarkLabel, mainPrices, benchPrices) {
-    if (chartInstance) chartInstance.destroy();
+    console.log('renderChart called with:', { labels: labels.length, relativeData: relativeData.length, mainPrices: mainPrices.length, benchPrices: benchPrices.length });
+    
+    if (chartInstance) {
+        console.log('Destroying existing chart instance');
+        chartInstance.destroy();
+    }
     // Convert labels to date objects for time scale in PST timezone
     const dateObjs = labels.map(d => {
         // Create date in PST timezone
@@ -433,8 +509,23 @@ function renderChart(labels, relativeData, scaleType, mainLabel, benchmarkLabel,
 
 // Render summary statistics
 function renderSummaryStats(main, benchmark, intervalKey, mainLabel, benchmarkLabel) {
-    const days = INTERVAL_MAP[intervalKey].days;
-    const years = days / 365;
+    let days = INTERVAL_MAP[intervalKey].days;
+    let years = days / 365;
+    
+    // Handle YTD case - calculate actual days from start of year
+    if (days === 0) { // YTD case
+        const currentDate = new Date();
+        const startOfYear = new Date(currentDate.getFullYear(), 0, 1); // January 1st of current year
+        days = Math.ceil((currentDate - startOfYear) / (1000 * 60 * 60 * 24));
+        years = days / 365;
+    } else if (days === -1) { // Since case - calculate days from selected year to current date
+        const currentDate = new Date();
+        const startOfSelectedYear = new Date(selectedYear, 0, 1); // January 1st of selected year
+        days = Math.ceil((currentDate - startOfSelectedYear) / (1000 * 60 * 60 * 24));
+        if (days < 0) days = 0; // Ensure we don't have negative days
+        years = days / 365;
+    }
+    
     const mainGrowth = percentGrowth(main.prices).toFixed(2);
     const benchGrowth = percentGrowth(benchmark.prices).toFixed(2);
     const mainCAGR = calculateCAGR(main.prices, years).toFixed(2);
@@ -448,13 +539,14 @@ function renderSummaryStats(main, benchmark, intervalKey, mainLabel, benchmarkLa
     
     // Get interval display name
     const intervalNames = {
-        '5d': '5 Days',
         '30d': '30 Days', 
         '90d': '90 Days',
         '6mo': '6 Months',
+        'ytd': 'Year to Date',
         '1y': '1 Year',
         '5y': '5 Years',
-        '10y': '10 Years'
+        '10y': '10 Years',
+        'since': `Since ${selectedYear}`
     };
     
     summaryStatsDiv.innerHTML = `
@@ -475,8 +567,74 @@ function renderSummaryStats(main, benchmark, intervalKey, mainLabel, benchmarkLa
     `;
 }
 
+// Populate year dropdown with available years
+function populateYearDropdown() {
+    console.log('populateYearDropdown called, yearSelect:', yearSelect, 'selectedYear:', selectedYear);
+    if (!yearSelect) {
+        console.log('yearSelect is null, returning early');
+        return;
+    }
+    
+    const currentYear = new Date().getFullYear();
+    const startYear = 2011; // Start year for "Since" selection (2011 onwards)
+    
+    yearSelect.innerHTML = '';
+    
+    for (let year = currentYear; year >= startYear; year--) {
+        const option = document.createElement('option');
+        option.value = year;
+        option.textContent = year;
+        if (year === selectedYear) {
+            option.selected = true;
+        }
+        yearSelect.appendChild(option);
+    }
+    
+    // Ensure the selected year is properly set and doesn't go below startYear
+    if (selectedYear < startYear) {
+        selectedYear = startYear;
+    }
+    yearSelect.value = selectedYear;
+    console.log('Year dropdown populated, selected value:', yearSelect.value);
+    console.log('Year dropdown options count:', yearSelect.options.length);
+    console.log('Year dropdown innerHTML length:', yearSelect.innerHTML.length);
+}
+
+// Handle year selection change
+function handleYearSelection() {
+    console.log('handleYearSelection called!');
+    if (yearSelect) {
+        const newYear = parseInt(yearSelect.value);
+        console.log('Year selection changed from', selectedYear, 'to', newYear);
+        selectedYear = newYear;
+        console.log('selectedYear updated to:', selectedYear);
+        console.log('Current form state:', {
+            mainTicker: mainTickerInput.value.trim(),
+            selectedBenchmark,
+            hasBenchmarkTicker: selectedBenchmark !== 'custom' || !!benchmarkTickerInput.value.trim()
+        });
+        
+        // Auto-refresh chart if we have data to work with
+        if (mainTickerInput.value.trim() && (selectedBenchmark !== 'custom' || benchmarkTickerInput.value.trim())) {
+            console.log('Triggering chart refresh due to year change');
+            form.dispatchEvent(new Event('submit'));
+        } else {
+            console.log('Not refreshing chart - conditions not met:', {
+                hasMainTicker: !!mainTickerInput.value.trim(),
+                hasBenchmarkTicker: selectedBenchmark !== 'custom' || !!benchmarkTickerInput.value.trim()
+            });
+        }
+    } else {
+        console.log('Warning: yearSelect is null in handleYearSelection');
+    }
+}
+
 // Highlight the default interval button
 function updateIntervalButtons() {
+    console.log('updateIntervalButtons called, selectedInterval:', selectedInterval);
+    console.log('yearDropdownContainer:', yearDropdownContainer);
+    console.log('yearSelect:', yearSelect);
+    
     document.querySelectorAll('.interval-btn').forEach(btn => {
         if (btn.dataset.value === selectedInterval) {
             btn.classList.add('selected');
@@ -484,14 +642,50 @@ function updateIntervalButtons() {
             btn.classList.remove('selected');
         }
     });
+    
+    // Show/hide year dropdown based on selected interval
+    if (yearDropdownContainer) {
+        const shouldShow = selectedInterval === 'since';
+        console.log('Should show year dropdown:', shouldShow);
+        yearDropdownContainer.style.display = shouldShow ? 'block' : 'none';
+        console.log('Year dropdown container display style:', yearDropdownContainer.style.display);
+        
+        // If showing the dropdown, make sure the selected year is properly set
+        if (shouldShow && yearSelect) {
+            yearSelect.value = selectedYear;
+            console.log('Set yearSelect.value to:', selectedYear);
+        }
+    } else {
+        console.log('yearDropdownContainer is null!');
+    }
 }
 
 // Set default values and load initial chart
 function initializeApp() {
     console.log('Initializing app...');
     
+    // Populate year dropdown
+    populateYearDropdown();
+    
     // Update UI to reflect default selections (main ticker and benchmark are already set in HTML)
     updateIntervalButtons();
+    
+    // Set up year dropdown event listener once
+    if (yearSelect) {
+        console.log('Setting up year dropdown event listener in initializeApp');
+        // Remove any existing listeners to avoid duplicates
+        yearSelect.removeEventListener('change', handleYearSelection);
+        yearSelect.addEventListener('change', handleYearSelection);
+        console.log('Year dropdown event listener added successfully');
+        
+        // Ensure the year dropdown is properly set if "Since" is the default interval
+        if (selectedInterval === 'since') {
+            yearSelect.value = selectedYear;
+            console.log('Since is default interval, set year dropdown to:', selectedYear);
+        }
+    } else {
+        console.log('Warning: yearSelect is null in initializeApp');
+    }
     
     console.log('About to trigger form submission...');
     // Load the chart with default values after a short delay to ensure everything is ready
@@ -503,10 +697,14 @@ function initializeApp() {
 
 intervalGroup.addEventListener('click', (e) => {
     if (e.target.classList.contains('interval-btn')) {
+        console.log('Interval button clicked:', e.target.dataset.value);
         selectedInterval = e.target.dataset.value;
         // Remove 'selected' from all, add to clicked
         document.querySelectorAll('.interval-btn').forEach(btn => btn.classList.remove('selected'));
         e.target.classList.add('selected');
+        
+        // Update UI to show/hide year dropdown
+        updateIntervalButtons();
         
         // Auto-refresh chart if we have data to work with
         if (mainTickerInput.value.trim() && (selectedBenchmark !== 'custom' || benchmarkTickerInput.value.trim())) {
@@ -551,6 +749,14 @@ form.addEventListener('submit', async (e) => {
     e.preventDefault();
     clearError();
     setLoading(true);
+    
+    // Add a timeout to prevent infinite loading
+    const requestTimeout = setTimeout(() => {
+        console.log('Request timeout reached, clearing loading state');
+        setLoading(false);
+        showError('Request timed out. Please try again.');
+    }, 30000); // 30 second timeout
+    
     try {
         const mainTicker = mainTickerInput.value.trim().toUpperCase();
         let benchmarkTicker = selectedBenchmark;
@@ -559,17 +765,45 @@ form.addEventListener('submit', async (e) => {
         }
         const intervalKey = selectedInterval;
         const scaleType = 'linear';
+        console.log('Form submission - selectedInterval:', selectedInterval, 'selectedYear:', selectedYear, 'days from INTERVAL_MAP:', INTERVAL_MAP[intervalKey].days);
+        console.log('Processing data with selectedYear:', selectedYear);
         if (!mainTicker || !benchmarkTicker) throw new Error('Please enter both ticker symbols.');
         // Fetch data in parallel
         const [mainTS, benchTS] = await Promise.all([
             fetchStockData(mainTicker, intervalKey, selectedPriceType),
             fetchStockData(benchmarkTicker, intervalKey, selectedPriceType)
         ]);
-        const days = INTERVAL_MAP[intervalKey].days;
+        let days = INTERVAL_MAP[intervalKey].days;
+        
+        // Handle YTD case - calculate actual days from start of year
+        if (days === 0) { // YTD case
+            const currentDate = new Date();
+            const startOfYear = new Date(currentDate.getFullYear(), 0, 1); // January 1st of current year
+            days = Math.ceil((currentDate - startOfYear) / (1000 * 60 * 60 * 24));
+            console.log('YTD case: calculated days =', days);
+        }
+        // Note: Since case (days === -1) is handled in processData function
+        
         const main = processData(mainTS, days, selectedPriceType);
         const bench = processData(benchTS, days, selectedPriceType);
+        
+        // Validate that we have data after processing
+        if (main.dates.length === 0 || bench.dates.length === 0) {
+            throw new Error(`No data available for ${main.dates.length === 0 ? mainTicker : benchmarkTicker} in the selected time period. Try selecting a different year or time interval.`);
+        }
+        
+        console.log('Data processed successfully:', {
+            main: { dates: main.dates.length, prices: main.prices.length },
+            bench: { dates: bench.dates.length, prices: bench.prices.length }
+        });
+        
         // Align dates (intersection)
         const commonDates = main.dates.filter(d => bench.dates.includes(d));
+        
+        if (commonDates.length === 0) {
+            throw new Error('No overlapping dates found between the two stocks. Try selecting a different time period.');
+        }
+        
         const mainIdx = main.dates.map((d, i) => commonDates.includes(d) ? i : -1).filter(i => i !== -1);
         const benchIdx = bench.dates.map((d, i) => commonDates.includes(d) ? i : -1).filter(i => i !== -1);
         const mainPrices = mainIdx.map(i => main.prices[i]);
@@ -577,12 +811,24 @@ form.addEventListener('submit', async (e) => {
         // Compute relative price (stock / benchmark), normalized to 1.0
         const relativePricesRaw = mainPrices.map((p, i) => p / benchPrices[i]);
         const relativePrices = normalizeToOne(relativePricesRaw);
+        
+        console.log('Chart data prepared:', {
+            commonDates: commonDates.length,
+            mainPrices: mainPrices.length,
+            benchPrices: benchPrices.length,
+            relativePrices: relativePrices.length
+        });
+        
+        console.log('About to render chart...');
         renderChart(commonDates, relativePrices, scaleType, mainTicker, benchmarkTicker, mainPrices, benchPrices);
+        console.log('Chart rendered successfully');
         renderSummaryStats(main, bench, intervalKey, mainTicker, benchmarkTicker);
     } catch (err) {
+        console.error('Error in form submission:', err);
         showError(err.message || 'Failed to fetch data.');
         if (chartInstance) chartInstance.destroy();
     } finally {
+        clearTimeout(requestTimeout);
         setLoading(false);
     }
 });
@@ -633,6 +879,10 @@ function updateChartTheme() {
 
 // Initialize dark mode when page loads
 document.addEventListener('DOMContentLoaded', () => {
+    console.log('DOMContentLoaded event fired');
+    console.log('yearSelect element:', yearSelect);
+    console.log('yearDropdownContainer element:', yearDropdownContainer);
+    
     initDarkMode();
     
     // Add event listener for dark mode toggle

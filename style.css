@@ -315,6 +315,43 @@ input[type="text"]:focus {
     box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
 }
 
+/* Year Dropdown Styles */
+.year-dropdown-container {
+    margin-top: 8px;
+    padding: 8px 0;
+}
+
+.year-dropdown-container label {
+    display: block;
+    margin-bottom: 4px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+.year-select {
+    width: 100%;
+    padding: 8px 12px;
+    border: 2px solid var(--input-border);
+    border-radius: 8px;
+    background: var(--input-bg);
+    color: var(--text-primary);
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.year-select:focus {
+    outline: none;
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.year-select:hover {
+    border-color: var(--accent-color);
+}
+
 /* Submit Button */
 button[type="submit"] {
     padding: 18px 32px;

@@ -52,13 +52,20 @@
                 <div class="input-group">
                     <label>Time Interval:</label>
                     <div id="interval-group" class="interval-group">
-                        <button type="button" class="interval-btn" data-value="5d">5d</button>
                         <button type="button" class="interval-btn" data-value="30d">30d</button>
                         <button type="button" class="interval-btn" data-value="90d">90d</button>
                         <button type="button" class="interval-btn" data-value="6mo">6Mo</button>
+                        <button type="button" class="interval-btn" data-value="ytd">YTD</button>
                         <button type="button" class="interval-btn" data-value="1y">1Y</button>
                         <button type="button" class="interval-btn" data-value="5y">5Y</button>
                         <button type="button" class="interval-btn" data-value="10y">10Y</button>
+                        <button type="button" class="interval-btn" data-value="since">Since</button>
+                    </div>
+                    <div id="year-dropdown-container" class="year-dropdown-container" style="display: none; margin-top: 8px;">
+                        <label for="year-select">Select Year:</label>
+                        <select id="year-select" class="year-select">
+                            <!-- Years will be populated by JavaScript -->
+                        </select>
                     </div>
                 </div>
                 <button type="submit"><span id="loading-btn-text">Compare</span></button>
