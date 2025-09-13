@@ -267,13 +267,26 @@ input[type="text"]:focus {
    ========================================================================== */
 .benchmark-btn-group {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 12px;
-    margin-top: 8px;
+    grid-template-columns: repeat(4, 1fr); /* Five equal columns for all buttons */
+    gap: 4px; /* Reduced gap between buttons */
+    margin-top: 4px;
+}
+
+.custom-benchmark-input-wrapper {
+    display: flex;
+    margin-top: 4px; /* Add some space above the new row */
+}
+
+/* Ensure custom input fills its grid cell */
+#custom-benchmark-input {
+    text-align: left; /* Center the text inside the input */
+    width: 150px;
+    height: 20px;
+    flex-grow: 0;
 }
 
 .benchmark-btn {
-    padding: 14px 16px;
+    padding: 8px 8px;
     border: 2px solid var(--input-border);
     border-radius: 12px;
     background: var(--card-bg);
@@ -411,30 +424,39 @@ button[type="submit"]:active {
     transform: translateY(0);
 }
 
-/* ==========================================================================
-   CUSTOM BENCHMARK INPUT
-   ========================================================================== */
-#benchmark-ticker {
-    margin-top: 12px;
-    width: 100%;
-    padding: 16px 20px;
-    border: 2px solid var(--input-border);
-    border-radius: 12px;
-    font-size: 1rem;
-    background: var(--input-bg);
-    color: var(--text-primary);
-    transition: all 0.3s ease;
-    font-weight: 500;
+/* Styles for the custom benchmark input when it's part of the benchmark-btn-group */
+#custom-benchmark-input::placeholder {
+    color: var(--text-primary); /* Make placeholder visible */
+    opacity: 0.7; /* Slightly transparent */
 }
 
-#benchmark-ticker:focus {
-    outline: none;
-    border-color: var(--accent-color);
+/* When custom input is selected and has value or is focused, make it look like an active input */
+#custom-benchmark-input.selected,
+#custom-benchmark-input:focus {
     background: var(--input-bg);
+    border-color: var(--accent-color);
+    color: var(--text-primary);
     box-shadow: 
         0 0 0 3px rgba(102, 126, 234, 0.1),
         0 4px 6px var(--shadow-medium);
     transform: translateY(-1px);
+    outline: none;
+}
+
+/* When custom input is selected but empty, keep it visually distinct but input-like */
+#custom-benchmark-input.selected:not(:focus):empty {
+    background: var(--input-bg);
+    border-color: var(--accent-color);
+    color: var(--text-primary);
+    box-shadow: 
+        0 0 0 3px rgba(102, 126, 234, 0.1),
+        0 4px 6px var(--shadow-medium);
+}
+
+/* Placeholder style when the custom input is selected but empty */
+#custom-benchmark-input.selected:not(:focus):empty::placeholder {
+    color: var(--text-primary);
+    opacity: 0.5;
 }
 
 /* ==========================================================================

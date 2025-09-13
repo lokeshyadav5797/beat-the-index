@@ -7,7 +7,8 @@ const form = document.getElementById('stock-form');
 const mainTickerInput = document.getElementById('main-ticker');
 const benchmarkBtnGroup = document.getElementById('benchmark-btn-group');
 const benchmarkBtns = benchmarkBtnGroup ? benchmarkBtnGroup.querySelectorAll('.benchmark-btn') : [];
-const benchmarkTickerInput = document.getElementById('benchmark-ticker');
+const customBenchmarkInput = document.getElementById('custom-benchmark-input');
+const customBenchmarkBtn = customBenchmarkInput; // The input itself acts as the custom benchmark button
 const scaleToggle = document.getElementById('scale-toggle');
 const loadingDiv = document.getElementById('loading');
 let errorDiv = null; // Will be created dynamically when needed
@@ -18,9 +19,19 @@ const darkModeToggle = document.getElementById('dark-mode-toggle');
 const yearDropdownContainer = document.getElementById('year-dropdown-container');
 const yearSelect = document.getElementById('year-select');
 let selectedInterval = '1y'; // Default
-let selectedBenchmark = 'VOO';
+let selectedBenchmark = document.querySelector('.benchmark-btn.selected') ? document.querySelector('.benchmark-btn.selected').dataset.value : '';
+if (!selectedBenchmark && customBenchmarkInput && customBenchmarkInput.value) {
+    selectedBenchmark = 'custom';
+    customBenchmarkInput.classList.add('selected');
+}
+// No longer need to hide custom benchmark input as it's now a button
+// if (selectedBenchmark === 'USD') {
+//     benchmarkTickerInput.style.display = 'none';
+//     benchmarkTickerInput.value = ''; // Ensure it's cleared
+// }
 let selectedYear = 2017; // Default to 2017
 console.log('Initial selectedYear:', selectedYear);
+const minSelectableYear = 2016; // The minimum year the user can select
 const priceTypeDropdown = document.getElementById('price-type-toggle-dropdown');
 const priceTypeToggleBtn = document.getElementById('price-type-toggle');
 const priceTypeMenu = priceTypeDropdown ? priceTypeDropdown.querySelector('.dropdown-menu') : null;
@@ -38,10 +49,10 @@ const INTERVAL_MAP = {
     '90d': { range: '3mo', interval: '1d', days: 90 },
     '6mo': { range: '6mo', interval: '1d', days: 182 },
     'ytd': { range: 'ytd', interval: '1d', days: 0 }, // Will be calculated dynamically
-    '1y': { range: '1y', interval: '1d', days: 365 },
+    '1y': { range: '1y', interval: '1wk', days: 365 },
     '5y': { range: '5y', interval: '1wk', days: 365*5 },
     '10y': { range: '10y', interval: '1wk', days: 365*10 },
-    'since': { range: 'max', interval: '1wk', days: -1 }, // Will be calculated dynamically based on selected year
+    'since': { range: '10y', interval: '1wk', days: -1 }, // Will be calculated dynamically based on selected year
 };
 
 // Utility: Show/hide loading in button after 2s delay
@@ -576,11 +587,8 @@ function populateYearDropdown() {
     }
     
     const currentYear = new Date().getFullYear();
-    const startYear = 2011; // Start year for "Since" selection (2011 onwards)
-    
-    yearSelect.innerHTML = '';
-    
-    for (let year = currentYear; year >= startYear; year--) {
+    // Populate with years from minSelectableYear to currentYear
+    for (let year = currentYear; year >= minSelectableYear; year--) {
         const option = document.createElement('option');
         option.value = year;
         option.textContent = year;
@@ -591,8 +599,8 @@ function populateYearDropdown() {
     }
     
     // Ensure the selected year is properly set and doesn't go below startYear
-    if (selectedYear < startYear) {
-        selectedYear = startYear;
+    if (selectedYear < minSelectableYear) {
+        selectedYear = minSelectableYear;
     }
     yearSelect.value = selectedYear;
     console.log('Year dropdown populated, selected value:', yearSelect.value);
@@ -611,17 +619,17 @@ function handleYearSelection() {
         console.log('Current form state:', {
             mainTicker: mainTickerInput.value.trim(),
             selectedBenchmark,
-            hasBenchmarkTicker: selectedBenchmark !== 'custom' || !!benchmarkTickerInput.value.trim()
+            hasBenchmarkTicker: selectedBenchmark !== 'custom' || selectedBenchmark === 'USD' || !!customBenchmarkInput.value.trim()
         });
         
         // Auto-refresh chart if we have data to work with
-        if (mainTickerInput.value.trim() && (selectedBenchmark !== 'custom' || benchmarkTickerInput.value.trim())) {
+        if (mainTickerInput.value.trim() && (selectedBenchmark !== 'custom' || selectedBenchmark === 'USD' || !!customBenchmarkInput.value.trim())) {
             console.log('Triggering chart refresh due to year change');
             form.dispatchEvent(new Event('submit'));
         } else {
             console.log('Not refreshing chart - conditions not met:', {
                 hasMainTicker: !!mainTickerInput.value.trim(),
-                hasBenchmarkTicker: selectedBenchmark !== 'custom' || !!benchmarkTickerInput.value.trim()
+                hasBenchmarkTicker: selectedBenchmark !== 'custom' || selectedBenchmark === 'USD' || !!customBenchmarkInput.value.trim()
             });
         }
     } else {
@@ -707,7 +715,7 @@ intervalGroup.addEventListener('click', (e) => {
         updateIntervalButtons();
         
         // Auto-refresh chart if we have data to work with
-        if (mainTickerInput.value.trim() && (selectedBenchmark !== 'custom' || benchmarkTickerInput.value.trim())) {
+        if (mainTickerInput.value.trim() && (selectedBenchmark !== 'custom' || selectedBenchmark === 'USD' || !!customBenchmarkInput.value.trim())) {
             // Trigger the form submission to refresh the chart
             form.dispatchEvent(new Event('submit'));
         }
@@ -717,22 +725,53 @@ intervalGroup.addEventListener('click', (e) => {
 // Handle benchmark button selection
 if (benchmarkBtnGroup) {
     benchmarkBtnGroup.addEventListener('click', (e) => {
+        // Check if the clicked element is one of the predefined benchmark buttons or the custom input
         if (e.target.classList.contains('benchmark-btn')) {
+            // Remove 'selected' class from all benchmark buttons, including the custom input
             benchmarkBtns.forEach(btn => btn.classList.remove('selected'));
+            if (customBenchmarkInput) customBenchmarkInput.classList.remove('selected');
+
+            // Add 'selected' class to the clicked button/input
             e.target.classList.add('selected');
-            selectedBenchmark = e.target.getAttribute('data-value');
+            selectedBenchmark = e.target.dataset.value;
+
+            // Special handling for the custom input field
             if (selectedBenchmark === 'custom') {
-                benchmarkTickerInput.style.display = '';
-                benchmarkTickerInput.focus();
+                customBenchmarkInput.focus();
+                if (!customBenchmarkInput.value) {
+                    customBenchmarkInput.placeholder = ''; // Clear placeholder when selected and empty
+                }
             } else {
-                benchmarkTickerInput.style.display = 'none';
+                // If another benchmark is selected, reset custom input
+                if (customBenchmarkInput) {
+                    customBenchmarkInput.placeholder = 'Custom';
+                    customBenchmarkInput.value = '';
+                }
             }
             
             // Auto-refresh chart if we have data to work with
-            if (mainTickerInput.value.trim() && (selectedBenchmark !== 'custom' || benchmarkTickerInput.value.trim())) {
+            if (mainTickerInput.value.trim() && (selectedBenchmark !== 'custom' || (selectedBenchmark === 'custom' && customBenchmarkInput.value.trim()) || selectedBenchmark === 'USD')) {
                 // Trigger the form submission to refresh the chart
                 form.dispatchEvent(new Event('submit'));
             }
+        }
+    });
+}
+
+// Handle input in the custom benchmark field
+if (customBenchmarkInput) {
+    customBenchmarkInput.addEventListener('input', () => {
+        // When user types, ensure 'custom' is selected and other buttons are unselected
+        benchmarkBtns.forEach(btn => btn.classList.remove('selected'));
+        customBenchmarkInput.classList.add('selected');
+        selectedBenchmark = 'custom';
+        customBenchmarkInput.placeholder = ''; // Keep placeholder empty while typing
+    });
+
+    customBenchmarkInput.addEventListener('blur', () => {
+        // If the custom input is blurred and empty, revert placeholder
+        if (!customBenchmarkInput.value.trim()) {
+            customBenchmarkInput.placeholder = 'Custom';
         }
     });
 }
@@ -761,17 +800,17 @@ form.addEventListener('submit', async (e) => {
         const mainTicker = mainTickerInput.value.trim().toUpperCase();
         let benchmarkTicker = selectedBenchmark;
         if (benchmarkTicker === 'custom') {
-            benchmarkTicker = benchmarkTickerInput.value.trim().toUpperCase();
+            benchmarkTicker = customBenchmarkInput.value.trim().toUpperCase();
         }
         const intervalKey = selectedInterval;
         const scaleType = 'linear';
         console.log('Form submission - selectedInterval:', selectedInterval, 'selectedYear:', selectedYear, 'days from INTERVAL_MAP:', INTERVAL_MAP[intervalKey].days);
         console.log('Processing data with selectedYear:', selectedYear);
-        if (!mainTicker || !benchmarkTicker) throw new Error('Please enter both ticker symbols.');
+        if (!mainTicker || (!benchmarkTicker && selectedBenchmark !== 'USD')) throw new Error('Please enter both ticker symbols.');
         // Fetch data in parallel
         const [mainTS, benchTS] = await Promise.all([
             fetchStockData(mainTicker, intervalKey, selectedPriceType),
-            fetchStockData(benchmarkTicker, intervalKey, selectedPriceType)
+            benchmarkTicker === 'USD' ? Promise.resolve({ results: [] }) : fetchStockData(benchmarkTicker, intervalKey, selectedPriceType)
         ]);
         let days = INTERVAL_MAP[intervalKey].days;
         
@@ -785,7 +824,7 @@ form.addEventListener('submit', async (e) => {
         // Note: Since case (days === -1) is handled in processData function
         
         const main = processData(mainTS, days, selectedPriceType);
-        const bench = processData(benchTS, days, selectedPriceType);
+        const bench = benchmarkTicker === 'USD' ? { dates: main.dates, prices: Array(main.dates.length).fill(1) } : processData(benchTS, days, selectedPriceType);
         
         // Validate that we have data after processing
         if (main.dates.length === 0 || bench.dates.length === 0) {
@@ -915,7 +954,7 @@ function setPriceType(value, label) {
     priceTypeDropdown.setAttribute('aria-expanded', 'false');
     priceTypeMenu.style.display = 'none';
     // Auto-refresh chart if we have data to work with
-    if (mainTickerInput.value.trim() && (selectedBenchmark !== 'custom' || benchmarkTickerInput.value.trim())) {
+    if (mainTickerInput.value.trim() && (selectedBenchmark !== 'custom' || (selectedBenchmark === 'custom' && customBenchmarkInput.value.trim()) || selectedBenchmark === 'USD')) {
         form.dispatchEvent(new Event('submit'));
     }
 }

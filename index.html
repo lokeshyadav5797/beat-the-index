@@ -42,12 +42,14 @@
                 <div class="input-group">
                     <label for="benchmark-ticker">Benchmark Ticker:</label>
                     <div id="benchmark-btn-group" class="benchmark-btn-group">
-                        <button type="button" class="benchmark-btn selected" data-value="VOO">VOO (S&P 500)</button>
-                        <button type="button" class="benchmark-btn" data-value="QQQ">QQQ (NASDAQ 100)</button>
-                        <button type="button" class="benchmark-btn" data-value="VTI">VTI (Total Market)</button>
-                        <button type="button" class="benchmark-btn" data-value="custom">Custom</button>
+                        <button type="button" class="benchmark-btn selected" data-value="VOO" title="S&P 500">VOO</button>
+                        <button type="button" class="benchmark-btn" data-value="QQQ" title="NASDAQ 100">QQQ</button>
+                        <button type="button" class="benchmark-btn" data-value="VTI" title="Total Market">VTI</button>
+                        <button type="button" class="benchmark-btn" data-value="USD" title="Absolute Return in USD">Absolute</button>
                     </div>
-                    <input type="text" id="benchmark-ticker" placeholder="e.g. SPY" style="width: 120px; margin-top: 8px; display: none;" />
+                    <div class="custom-benchmark-input-wrapper">
+                        <input type="text" id="custom-benchmark-input" class="benchmark-btn" data-value="custom" placeholder="Custom" value="" />
+                    </div>
                 </div>
                 <div class="input-group">
                     <label>Time Interval:</label>
