@@ -49,7 +49,7 @@ const INTERVAL_MAP = {
     '90d': { range: '3mo', interval: '1d', days: 90 },
     '6mo': { range: '6mo', interval: '1d', days: 182 },
     'ytd': { range: 'ytd', interval: '1d', days: 0 }, // Will be calculated dynamically
-    '1y': { range: '1y', interval: '1wk', days: 365 },
+    '1y': { range: '1y', interval: '1d', days: 365 },
     '5y': { range: '5y', interval: '1wk', days: 365*5 },
     '10y': { range: '10y', interval: '1wk', days: 365*10 },
     'since': { range: '10y', interval: '1wk', days: -1 }, // Will be calculated dynamically based on selected year
